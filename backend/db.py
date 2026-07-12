@@ -83,6 +83,78 @@ def init_db():
             roleID INT,
             FOREIGN KEY (roleID) REFERENCES role(roleID) ON DELETE SET NULL
         ) ENGINE=InnoDB;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS Customer (
+            CustomerID INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            mobile_no VARCHAR(15) NOT NULL,
+            email VARCHAR(100)
+        ) ENGINE=InnoDB;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS address (
+            ID INT AUTO_INCREMENT PRIMARY KEY,
+            CustomerID INT NOT NULL,
+            house_no VARCHAR(50),
+            area VARCHAR(100),
+            pincode VARCHAR(10),
+            town VARCHAR(100),
+            state VARCHAR(100),
+            FOREIGN KEY (CustomerID) REFERENCES Customer(CustomerID) ON DELETE CASCADE
+        ) ENGINE=InnoDB;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS vehicle (
+            VehicleID INT AUTO_INCREMENT PRIMARY KEY,
+            plate_no VARCHAR(50) UNIQUE NOT NULL,
+            maxloadcapacity INT,
+            status VARCHAR(20) DEFAULT 'available',
+            vehicle_type VARCHAR(50),
+            fuel_type VARCHAR(20) DEFAULT 'petrol',
+            odometer INT DEFAULT 0,
+            acquisition_cost DECIMAL(12, 2)
+        ) ENGINE=InnoDB;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS vehicle_documents (
+            ID INT AUTO_INCREMENT PRIMARY KEY,
+            VehicleID INT NOT NULL,
+            DocumentName VARCHAR(100) NOT NULL,
+            filepath VARCHAR(255) NOT NULL,
+            FOREIGN KEY (VehicleID) REFERENCES vehicle(VehicleID) ON DELETE CASCADE
+        ) ENGINE=InnoDB;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS driver (
+            DriverID INT AUTO_INCREMENT PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            contact_no VARCHAR(15),
+            safety_rating DECIMAL(3, 2)
+        ) ENGINE=InnoDB;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS driver_document (
+            ID INT AUTO_INCREMENT PRIMARY KEY,
+            DriverID INT NOT NULL,
+            document_name VARCHAR(100) NOT NULL,
+            filepath VARCHAR(255) NOT NULL,
+            expiry_date VARCHAR(20),
+            FOREIGN KEY (DriverID) REFERENCES driver(DriverID) ON DELETE CASCADE
+        ) ENGINE=InnoDB;
+        """,
+        """
+        CREATE TABLE IF NOT EXISTS Trip (
+            ID INT AUTO_INCREMENT PRIMARY KEY,
+            source_ID INT NOT NULL,
+            dest_ID INT NOT NULL,
+            VehicleID INT,
+            cargo_weight DECIMAL(10, 2),
+            status VARCHAR(20) DEFAULT 'pending',
+            FOREIGN KEY (source_ID) REFERENCES address(ID) ON DELETE CASCADE,
+            FOREIGN KEY (dest_ID) REFERENCES address(ID) ON DELETE CASCADE,
+            FOREIGN KEY (VehicleID) REFERENCES vehicle(VehicleID) ON DELETE SET NULL
+        ) ENGINE=InnoDB;
         """
     ]
         
@@ -90,6 +162,19 @@ def init_db():
         cursor = conn.cursor()
         for query in queries:
             cursor.execute(query)
+        try:
+            cursor.execute("ALTER TABLE vehicle ADD COLUMN fuel_type VARCHAR(20) DEFAULT 'petrol';")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE Trip ADD COLUMN VehicleID INT;")
+            cursor.execute("ALTER TABLE Trip ADD FOREIGN KEY (VehicleID) REFERENCES vehicle(VehicleID) ON DELETE SET NULL;")
+        except Exception:
+            pass
+        try:
+            cursor.execute("ALTER TABLE Trip ADD COLUMN status VARCHAR(20) DEFAULT 'pending';")
+        except Exception:
+            pass
         print("Database tables initialized successfully on MySQL!")
 
 if __name__ == '__main__':

@@ -7,6 +7,12 @@ import AddUser from './pages/AddUser';
 import AddCustomer from './pages/AddCustomer';
 import CustomerList from './pages/CustomerList';
 import EditCustomer from './pages/EditCustomer';
+import VehicleList from './pages/VehicleList';
+import AddVehicle from './pages/AddVehicle';
+import EditVehicle from './pages/EditVehicle';
+import TripList from './pages/TripList';
+import AddTrip from './pages/AddTrip';
+import EditTrip from './pages/EditTrip';
 import Login from './pages/Login';
 import './App.css';
 
@@ -39,6 +45,10 @@ export default function App() {
   const [users, setUsers] = useState(INITIAL_USERS);
   const [customers, setCustomers] = useState([]);
   const [editingCustomer, setEditingCustomer] = useState(null);
+  const [vehicles, setVehicles] = useState([]);
+  const [editingVehicle, setEditingVehicle] = useState(null);
+  const [trips, setTrips] = useState([]);
+  const [editingTrip, setEditingTrip] = useState(null);
   const [stats, setStats] = useState(INITIAL_STATS);
   const [activityLog, setActivityLog] = useState(INITIAL_ACTIVITY);
   const [toast, setToast] = useState(null);
@@ -106,6 +116,8 @@ export default function App() {
     if (isLoggedIn) {
       fetchUsers();
       fetchCustomers();
+      fetchVehicles();
+      fetchTrips();
     }
   }, [isLoggedIn]);
 
@@ -342,6 +354,368 @@ export default function App() {
     }
   };
 
+  const fetchVehicles = () => {
+    fetch('/api/vehicles')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch vehicles');
+        return res.json();
+      })
+      .then((data) => {
+        if (data.status === 'success') {
+          setVehicles(data.vehicles);
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching vehicles:', err);
+      });
+  };
+
+  const handleAddVehicle = (newVehicleData) => {
+    fetch('/api/add_vehicle', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(newVehicleData)
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || 'Failed to register vehicle');
+        }
+        return data;
+      })
+      .then((data) => {
+        if (data.status === 'success') {
+          showToast('success', `Vehicle ${newVehicleData.plate_no} registered successfully.`);
+          fetchVehicles();
+          setActivePage('vehicle');
+
+          const now = new Date();
+          setActivityLog(logs => [
+            {
+              action: 'INSERT',
+              module: 'vehicle',
+              entity_type: 'vehicle',
+              title: `Vehicle added: ${newVehicleData.plate_no} (${newVehicleData.vehicle_type})`,
+              timestamp: now.toTimeString().split(' ')[0]
+            },
+            ...logs
+          ]);
+        } else {
+          showToast('error', data.message || 'Failed to add vehicle.');
+        }
+      })
+      .catch((err) => {
+        showToast('error', err.message);
+      });
+  };
+
+  const handleEditVehicle = (updatedVehicleData) => {
+    fetch('/api/update_vehicle', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(updatedVehicleData)
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || 'Failed to update vehicle');
+        }
+        return data;
+      })
+      .then((data) => {
+        if (data.status === 'success') {
+          showToast('success', `Vehicle ${updatedVehicleData.plate_no} updated successfully.`);
+          fetchVehicles();
+          setActivePage('vehicle');
+          setEditingVehicle(null);
+
+          const now = new Date();
+          setActivityLog(logs => [
+            {
+              action: 'UPDATE',
+              module: 'vehicle',
+              entity_type: 'vehicle',
+              title: `Vehicle updated: ${updatedVehicleData.plate_no} (${updatedVehicleData.status})`,
+              timestamp: now.toTimeString().split(' ')[0]
+            },
+            ...logs
+          ]);
+        } else {
+          showToast('error', data.message || 'Failed to update vehicle.');
+        }
+      })
+      .catch((err) => {
+        showToast('error', err.message);
+      });
+  };
+
+  const handleDeleteVehicle = (vehicleID) => {
+    const vToDelete = vehicles.find(v => v.VehicleID === vehicleID);
+    if (!vToDelete) return;
+    if (window.confirm(`Are you sure you want to permanently delete vehicle ${vToDelete.plate_no}?`)) {
+      fetch('/api/remove_vehicle', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ vehicleID })
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to delete vehicle');
+          return res.json();
+        })
+        .then((data) => {
+          if (data.status === 'success') {
+            showToast('error', `Vehicle ${vToDelete.plate_no} has been deleted.`);
+            fetchVehicles();
+            const now = new Date();
+            setActivityLog(logs => [
+              {
+                action: 'DELETE',
+                module: 'vehicle',
+                entity_type: 'vehicle',
+                title: `Vehicle deleted: ${vToDelete.plate_no}`,
+                timestamp: now.toTimeString().split(' ')[0]
+              },
+              ...logs
+            ]);
+          } else {
+            showToast('error', data.message || 'Failed to delete vehicle.');
+          }
+        })
+        .catch((err) => {
+          showToast('error', err.message);
+        });
+    }
+  };
+
+  const handleAddDocument = (vehicleID, documentName, filepath) => {
+    fetch('/api/add_vehicle_document', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ VehicleID: vehicleID, DocumentName: documentName, filepath: filepath })
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || 'Failed to add document');
+        }
+        return data;
+      })
+      .then((data) => {
+        if (data.status === 'success') {
+          showToast('success', `Document "${documentName}" linked successfully.`);
+          fetchVehicles();
+        } else {
+          showToast('error', data.message || 'Failed to add document.');
+        }
+      })
+      .catch((err) => {
+        showToast('error', err.message);
+      });
+  };
+
+  const handleDeleteDocument = (docID) => {
+    fetch('/api/delete_vehicle_document', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ ID: docID })
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || 'Failed to delete document');
+        }
+        return data;
+      })
+      .then((data) => {
+        if (data.status === 'success') {
+          showToast('info', `Document removed.`);
+          fetchVehicles();
+        } else {
+          showToast('error', data.message || 'Failed to delete document.');
+        }
+      })
+      .catch((err) => {
+        showToast('error', err.message);
+      });
+  };
+
+  const fetchTrips = () => {
+    fetch('/api/trip_list')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch trips');
+        return res.json();
+      })
+      .then((data) => {
+        if (data.status === 'success') {
+          setTrips(data.trips);
+          const activeCount = data.trips.filter(t => (t.status || 'pending').toLowerCase() === 'pending').length;
+          const completedCount = data.trips.filter(t => (t.status || '').toLowerCase() === 'completed').length;
+          setStats(prev => ({
+            ...prev,
+            activeTrips: activeCount,
+            completedTrips: completedCount
+          }));
+        }
+      })
+      .catch((err) => {
+        console.error('Error fetching trips:', err);
+      });
+  };
+
+  const handleAddTrip = (newTripData) => {
+    fetch('/api/add_trip', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(newTripData)
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to dispatch trip');
+        return data;
+      })
+      .then((data) => {
+        if (data.status === 'success') {
+          showToast('success', 'Trip dispatched successfully.');
+          fetchTrips();
+          setActivePage('trips');
+          
+          const now = new Date();
+          setActivityLog(logs => [
+            {
+              action: 'INSERT',
+              module: 'trip',
+              entity_type: 'trip',
+              title: `Trip dispatched: cargo weight ${newTripData.cargo_weight} kg`,
+              timestamp: now.toTimeString().split(' ')[0]
+            },
+            ...logs
+          ]);
+        } else {
+          showToast('error', data.message || 'Failed to add trip.');
+        }
+      })
+      .catch((err) => {
+        showToast('error', err.message);
+      });
+  };
+
+  const handleEditTrip = (updatedTripData) => {
+    fetch('/api/update_trip', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(updatedTripData)
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to update trip');
+        return data;
+      })
+      .then((data) => {
+        if (data.status === 'success') {
+          showToast('success', 'Trip updated successfully.');
+          fetchTrips();
+          setActivePage('trips');
+          setEditingTrip(null);
+          
+          const now = new Date();
+          setActivityLog(logs => [
+            {
+              action: 'UPDATE',
+              module: 'trip',
+              entity_type: 'trip',
+              title: `Trip ID ${updatedTripData.ID} updated (${updatedTripData.status})`,
+              timestamp: now.toTimeString().split(' ')[0]
+            },
+            ...logs
+          ]);
+        } else {
+          showToast('error', data.message || 'Failed to update trip.');
+        }
+      })
+      .catch((err) => {
+        showToast('error', err.message);
+      });
+  };
+
+  const handleDeleteTrip = (tripID) => {
+    if (window.confirm('Are you sure you want to permanently cancel/delete this trip?')) {
+      fetch('/api/delete_trip', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ ID: tripID })
+      })
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to delete trip');
+          return res.json();
+        })
+        .then((data) => {
+          if (data.status === 'success') {
+            showToast('error', 'Trip has been canceled and removed.');
+            fetchTrips();
+          } else {
+            showToast('error', data.message || 'Failed to delete trip.');
+          }
+        })
+        .catch((err) => {
+          showToast('error', err.message);
+        });
+    }
+  };
+
+  const handleCompleteTrip = (tripID) => {
+    fetch('/api/update_trip', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ ID: tripID, status: 'completed' })
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Failed to complete trip');
+        return data;
+      })
+      .then((data) => {
+        if (data.status === 'success') {
+          showToast('success', 'Trip completed successfully!');
+          fetchTrips();
+          
+          const now = new Date();
+          setActivityLog(logs => [
+            {
+              action: 'UPDATE',
+              module: 'trip',
+              entity_type: 'trip',
+              title: `Trip ID ${tripID} marked COMPLETED`,
+              timestamp: now.toTimeString().split(' ')[0]
+            },
+            ...logs
+          ]);
+        } else {
+          showToast('error', data.message || 'Failed to complete trip.');
+        }
+      })
+      .catch((err) => {
+        showToast('error', err.message);
+      });
+  };
+
   if (!isLoggedIn) {
     return (
       <div className="login-root">
@@ -451,8 +825,75 @@ export default function App() {
             />
           )}
 
+          {activePage === 'vehicle' && (
+            <VehicleList
+              vehicles={vehicles}
+              onDeleteVehicle={handleDeleteVehicle}
+              onAddVehicleClick={() => setActivePage('add-vehicle')}
+              onEditVehicleClick={(v) => {
+                setEditingVehicle(v);
+                setActivePage('edit-vehicle');
+              }}
+              onAddDocument={handleAddDocument}
+              onDeleteDocument={handleDeleteDocument}
+            />
+          )}
+
+          {activePage === 'add-vehicle' && (
+            <AddVehicle
+              onAddVehicle={handleAddVehicle}
+              onCancel={() => setActivePage('vehicle')}
+            />
+          )}
+
+          {activePage === 'edit-vehicle' && (
+            <EditVehicle
+              vehicle={editingVehicle}
+              onEditVehicle={handleEditVehicle}
+              onCancel={() => {
+                setEditingVehicle(null);
+                setActivePage('vehicle');
+              }}
+            />
+          )}
+
+          {activePage === 'trips' && (
+            <TripList
+              trips={trips}
+              onAddTripClick={() => setActivePage('add-trip')}
+              onEditTripClick={(t) => {
+                setEditingTrip(t);
+                setActivePage('edit-trip');
+              }}
+              onDeleteTrip={handleDeleteTrip}
+              onCompleteTrip={handleCompleteTrip}
+            />
+          )}
+
+          {activePage === 'add-trip' && (
+            <AddTrip
+              vehicles={vehicles}
+              customers={customers}
+              onAddTrip={handleAddTrip}
+              onCancel={() => setActivePage('trips')}
+            />
+          )}
+
+          {activePage === 'edit-trip' && (
+            <EditTrip
+              trip={editingTrip}
+              vehicles={vehicles}
+              customers={customers}
+              onEditTrip={handleEditTrip}
+              onCancel={() => {
+                setEditingTrip(null);
+                setActivePage('trips');
+              }}
+            />
+          )}
+
           {/* Under construction fallbacks for other menus */}
-          {activePage !== 'dashboard' && activePage !== 'users' && activePage !== 'add-user' && activePage !== 'customers' && activePage !== 'add-customer' && activePage !== 'edit-customer' && (
+          {activePage !== 'dashboard' && activePage !== 'users' && activePage !== 'add-user' && activePage !== 'customers' && activePage !== 'add-customer' && activePage !== 'edit-customer' && activePage !== 'vehicle' && activePage !== 'add-vehicle' && activePage !== 'edit-vehicle' && activePage !== 'trips' && activePage !== 'add-trip' && activePage !== 'edit-trip' && (
             <div className="row justify-content-center align-items-center py-5">
               <div className="col-12 col-md-8 col-lg-6 text-center">
                 <div className="card border-0 shadow-sm p-5" style={{ borderRadius: '16px' }}>
