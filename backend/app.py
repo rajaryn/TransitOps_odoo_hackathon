@@ -352,6 +352,39 @@ def create_app(test_config=None):
 
     # --- Vehicle CRUD APIs ---
 
+    @app.route('/api/vehicles', methods=['GET'])
+    def get_vehicles():
+        from db import get_db_connection
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cursor:
+                    # Fetch all vehicles
+                    cursor.execute("SELECT VehicleID, plate_no, maxloadcapacity, status, vehicle_type, fuel_type, odometer, acquisition_cost FROM vehicle;")
+                    vehicles = cursor.fetchall()
+                    
+                    # Fetch all vehicle documents
+                    cursor.execute("SELECT ID, VehicleID, DocumentName, filepath FROM vehicle_documents;")
+                    documents = cursor.fetchall()
+                    
+            # Group documents by VehicleID
+            vehicle_docs = {}
+            for doc in documents:
+                v_id = doc['VehicleID']
+                if v_id not in vehicle_docs:
+                    vehicle_docs[v_id] = []
+                vehicle_docs[v_id].append(doc)
+                
+            # Attach documents to vehicles
+            for v in vehicles:
+                v_id = v['VehicleID']
+                if v['acquisition_cost'] is not None:
+                    v['acquisition_cost'] = float(v['acquisition_cost'])
+                v['documents'] = vehicle_docs.get(v_id, [])
+                
+            return {"status": "success", "vehicles": vehicles}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}, 500
+
     @app.route('/api/add_vehicle', methods=['POST'])
     def add_vehicle():
         from db import get_db_connection
@@ -361,6 +394,7 @@ def create_app(test_config=None):
         max_load = data.get('maxloadcapacity') or request.args.get('maxloadcapacity')
         status = data.get('status') or request.args.get('status', 'available')
         v_type = data.get('vehicle_type') or request.args.get('vehicle_type')
+        fuel_type = data.get('fuel_type') or request.args.get('fuel_type', 'petrol')
         odometer = data.get('odometer') or request.args.get('odometer', 0)
         cost = data.get('acquisition_cost') or request.args.get('acquisition_cost')
         
@@ -378,10 +412,10 @@ def create_app(test_config=None):
                         
                     cursor.execute(
                         """
-                        INSERT INTO vehicle (plate_no, maxloadcapacity, status, vehicle_type, odometer, acquisition_cost) 
-                        VALUES (%s, %s, %s, %s, %s, %s);
+                        INSERT INTO vehicle (plate_no, maxloadcapacity, status, vehicle_type, fuel_type, odometer, acquisition_cost) 
+                        VALUES (%s, %s, %s, %s, %s, %s, %s);
                         """,
-                        (plate_no, max_load, status, v_type, odometer, cost)
+                        (plate_no, max_load, status, v_type, fuel_type, odometer, cost)
                     )
                     vehicle_id = cursor.lastrowid
             return {
@@ -393,6 +427,7 @@ def create_app(test_config=None):
                     "maxloadcapacity": max_load,
                     "status": status,
                     "vehicle_type": v_type,
+                    "fuel_type": fuel_type,
                     "odometer": odometer,
                     "acquisition_cost": cost
                 }
@@ -410,6 +445,7 @@ def create_app(test_config=None):
         max_load = data.get('maxloadcapacity') or request.args.get('maxloadcapacity')
         status = data.get('status') or request.args.get('status')
         v_type = data.get('vehicle_type') or request.args.get('vehicle_type')
+        fuel_type = data.get('fuel_type') or request.args.get('fuel_type')
         odometer = data.get('odometer') or request.args.get('odometer')
         cost = data.get('acquisition_cost') or request.args.get('acquisition_cost')
         
@@ -430,6 +466,7 @@ def create_app(test_config=None):
                     new_max_load = max_load if max_load is not None else vehicle['maxloadcapacity']
                     new_status = status if status is not None else vehicle['status']
                     new_type = v_type if v_type is not None else vehicle['vehicle_type']
+                    new_fuel = fuel_type if fuel_type is not None else vehicle.get('fuel_type', 'petrol')
                     new_odometer = odometer if odometer is not None else vehicle['odometer']
                     new_cost = cost if cost is not None else vehicle['acquisition_cost']
                     
@@ -443,10 +480,10 @@ def create_app(test_config=None):
                     cursor.execute(
                         """
                         UPDATE vehicle 
-                        SET plate_no=%s, maxloadcapacity=%s, status=%s, vehicle_type=%s, odometer=%s, acquisition_cost=%s 
+                        SET plate_no=%s, maxloadcapacity=%s, status=%s, vehicle_type=%s, fuel_type=%s, odometer=%s, acquisition_cost=%s 
                         WHERE VehicleID=%s;
                         """,
-                        (new_plate, new_max_load, new_status, new_type, new_odometer, new_cost, vehicle_id)
+                        (new_plate, new_max_load, new_status, new_type, new_fuel, new_odometer, new_cost, vehicle_id)
                     )
             return {
                 "status": "success",
@@ -457,6 +494,7 @@ def create_app(test_config=None):
                     "maxloadcapacity": new_max_load,
                     "status": new_status,
                     "vehicle_type": new_type,
+                    "fuel_type": new_fuel,
                     "odometer": new_odometer,
                     "acquisition_cost": new_cost
                 }
@@ -841,14 +879,19 @@ def create_app(test_config=None):
             with get_db_connection() as conn:
                 with conn.cursor() as cursor:
                     cursor.execute("""
-                        SELECT t.ID, t.source_ID, t.dest_ID, t.cargo_weight,
+                        SELECT t.ID, t.source_ID, t.dest_ID, t.VehicleID, t.cargo_weight, t.status,
                                s.house_no AS source_house, s.area AS source_area, s.pincode AS source_pincode, s.town AS source_town, s.state AS source_state,
-                               d.house_no AS dest_house, d.area AS dest_area, d.pincode AS dest_pincode, d.town AS dest_town, d.state AS dest_state
+                               d.house_no AS dest_house, d.area AS dest_area, d.pincode AS dest_pincode, d.town AS dest_town, d.state AS dest_state,
+                               v.plate_no, v.maxloadcapacity
                         FROM Trip t
                         LEFT JOIN address s ON t.source_ID = s.ID
-                        LEFT JOIN address d ON t.dest_ID = d.ID;
+                        LEFT JOIN address d ON t.dest_ID = d.ID
+                        LEFT JOIN vehicle v ON t.VehicleID = v.VehicleID;
                     """)
                     trips = cursor.fetchall()
+                    for t in trips:
+                        if t['cargo_weight'] is not None:
+                            t['cargo_weight'] = float(t['cargo_weight'])
             return {"status": "success", "trips": trips}
         except Exception as e:
             return {"status": "error", "message": str(e)}, 500
@@ -860,7 +903,9 @@ def create_app(test_config=None):
         data = request.get_json() or {}
         source_id = data.get('source_ID') or request.args.get('source_ID')
         dest_id = data.get('dest_ID') or request.args.get('dest_ID')
+        vehicle_id = data.get('VehicleID') or request.args.get('VehicleID')
         cargo_weight = data.get('cargo_weight') or request.args.get('cargo_weight')
+        status = data.get('status') or request.args.get('status', 'pending')
         
         if not source_id or not dest_id:
             return {"status": "error", "message": "source_ID and dest_ID are required."}, 400
@@ -878,9 +923,22 @@ def create_app(test_config=None):
                     if not cursor.fetchone():
                         return {"status": "error", "message": f"Destination address with ID {dest_id} not found."}, 404
                         
+                    # Validate vehicle load capacity
+                    if vehicle_id:
+                        cursor.execute("SELECT maxloadcapacity, plate_no FROM vehicle WHERE VehicleID = %s;", (vehicle_id,))
+                        veh = cursor.fetchone()
+                        if not veh:
+                            return {"status": "error", "message": f"Vehicle with ID {vehicle_id} not found."}, 404
+                        if cargo_weight and veh['maxloadcapacity'] is not None:
+                            if float(cargo_weight) > float(veh['maxloadcapacity']):
+                                return {
+                                    "status": "error",
+                                    "message": f"Cargo weight ({cargo_weight} kg) exceeds vehicle {veh['plate_no']}'s maximum load capacity ({veh['maxloadcapacity']} kg)."
+                                }, 400
+                                
                     cursor.execute(
-                        "INSERT INTO Trip (source_ID, dest_ID, cargo_weight) VALUES (%s, %s, %s);",
-                        (source_id, dest_id, cargo_weight)
+                        "INSERT INTO Trip (source_ID, dest_ID, VehicleID, cargo_weight, status) VALUES (%s, %s, %s, %s, %s);",
+                        (source_id, dest_id, vehicle_id, cargo_weight, status)
                     )
                     trip_id = cursor.lastrowid
             return {
@@ -890,7 +948,9 @@ def create_app(test_config=None):
                     "ID": trip_id,
                     "source_ID": source_id,
                     "dest_ID": dest_id,
-                    "cargo_weight": cargo_weight
+                    "VehicleID": vehicle_id,
+                    "cargo_weight": cargo_weight,
+                    "status": status
                 }
             }
         except Exception as e:
@@ -904,7 +964,9 @@ def create_app(test_config=None):
         trip_id = data.get('ID') or data.get('tripID') or request.args.get('ID') or request.args.get('tripID')
         source_id = data.get('source_ID') or request.args.get('source_ID')
         dest_id = data.get('dest_ID') or request.args.get('dest_ID')
+        vehicle_id = data.get('VehicleID') or request.args.get('VehicleID')
         cargo_weight = data.get('cargo_weight') or request.args.get('cargo_weight')
+        status = data.get('status') or request.args.get('status')
         
         if not trip_id:
             return {"status": "error", "message": "trip ID is required."}, 400
@@ -920,7 +982,9 @@ def create_app(test_config=None):
                         
                     new_source = source_id if source_id is not None else trip['source_ID']
                     new_dest = dest_id if dest_id is not None else trip['dest_ID']
+                    new_vehicle = vehicle_id if vehicle_id is not None else trip.get('VehicleID')
                     new_weight = cargo_weight if cargo_weight is not None else trip['cargo_weight']
+                    new_status = status if status is not None else trip.get('status', 'pending')
                     
                     # Validate source address exists
                     cursor.execute("SELECT ID FROM address WHERE ID = %s;", (new_source,))
@@ -932,9 +996,22 @@ def create_app(test_config=None):
                     if not cursor.fetchone():
                         return {"status": "error", "message": f"Destination address with ID {new_dest} not found."}, 404
                         
+                    # Validate vehicle load capacity
+                    if new_vehicle:
+                        cursor.execute("SELECT maxloadcapacity, plate_no FROM vehicle WHERE VehicleID = %s;", (new_vehicle,))
+                        veh = cursor.fetchone()
+                        if not veh:
+                            return {"status": "error", "message": f"Vehicle with ID {new_vehicle} not found."}, 404
+                        if new_weight and veh['maxloadcapacity'] is not None:
+                            if float(new_weight) > float(veh['maxloadcapacity']):
+                                return {
+                                    "status": "error",
+                                    "message": f"Cargo weight ({new_weight} kg) exceeds vehicle {veh['plate_no']}'s maximum load capacity ({veh['maxloadcapacity']} kg)."
+                                }, 400
+                                
                     cursor.execute(
-                        "UPDATE Trip SET source_ID=%s, dest_ID=%s, cargo_weight=%s WHERE ID=%s;",
-                        (new_source, new_dest, new_weight, trip_id)
+                        "UPDATE Trip SET source_ID=%s, dest_ID=%s, VehicleID=%s, cargo_weight=%s, status=%s WHERE ID=%s;",
+                        (new_source, new_dest, new_vehicle, new_weight, new_status, trip_id)
                     )
             return {
                 "status": "success",
@@ -943,7 +1020,9 @@ def create_app(test_config=None):
                     "ID": int(trip_id),
                     "source_ID": new_source,
                     "dest_ID": new_dest,
-                    "cargo_weight": new_weight
+                    "VehicleID": new_vehicle,
+                    "cargo_weight": new_weight,
+                    "status": new_status
                 }
             }
         except Exception as e:

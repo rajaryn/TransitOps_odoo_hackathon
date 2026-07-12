@@ -5,6 +5,7 @@ const SIDEBAR_ITEMS = [
   { key: 'users', icon: 'fas fa-users-cog', label: 'Users' },
   { key: 'customers', icon: 'fas fa-address-book', label: 'Customers' },
   { key: 'vehicle', icon: 'fas fa-bus', label: 'Vehicle' },
+  { key: 'trips', icon: 'fas fa-route', label: 'Trips' },
 ];
 
 export default function Sidebar({ collapsed, activePage, onChangePage, onLogout }) {
@@ -24,7 +25,9 @@ export default function Sidebar({ collapsed, activePage, onChangePage, onLogout 
             const isPageActive = 
               activePage === item.key || 
               (item.key === 'users' && activePage === 'add-user') ||
-              (item.key === 'customers' && (activePage === 'add-customer' || activePage === 'edit-customer'));
+              (item.key === 'customers' && (activePage === 'add-customer' || activePage === 'edit-customer')) ||
+              (item.key === 'vehicle' && (activePage === 'add-vehicle' || activePage === 'edit-vehicle')) ||
+              (item.key === 'trips' && (activePage === 'add-trip' || activePage === 'edit-trip'));
             return (
               <li className="nav-item" key={item.key}>
                 <a
